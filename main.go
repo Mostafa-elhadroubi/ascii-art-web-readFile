@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-
+	"os"
 	"strings"
 )
 
@@ -17,6 +17,21 @@ type Data struct {
 	A	template.HTML
 }
 
+
+
+func createFile(filename string) error {
+    // Create a new file with read and write permissions for the owner
+    file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600) // Owner can read/write
+    if err != nil {
+		fmt.Println(err)
+		return err
+	}
+    defer file.Close()
+
+    // Write some data to the file
+    // _, err = file.WriteString("This is a sample text.")
+    return err
+}
 
 func processHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -41,6 +56,10 @@ func processHandler(w http.ResponseWriter, r *http.Request) {
 	data.Res = function.TraitmentData(data.Banner, data.Str)
 	if data.Res == "" { 
 		http.Error(w, "Internal Server Error: Failed to process data.", http.StatusInternalServerError)
+		return
+	}
+	if err := createFile("ascii-art.txt"); err != nil {
+		http.Error(w,  "Failed to create file.", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Disposition", "attachment; filename=ascii-art.txt")
