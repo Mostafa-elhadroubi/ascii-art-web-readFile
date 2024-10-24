@@ -68,7 +68,6 @@ func exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if data.Res != "" {
-		// fmt.Println(data.Res)
 		w.Header().Set("Content-Disposition", "attachment; filename=ascii-art.txt")
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Content-Length",  fmt.Sprintf("%d", len(data.Res)))
