@@ -2,13 +2,11 @@ package main
 
 import (
 	"ascii-art/functions"
-	"fmt"
 	"html/template"
 	"net/http"
-	"os"
+	"fmt"
 	"strings"
 )
-
 
 type Data struct {
 	Str string
@@ -16,84 +14,83 @@ type Data struct {
 	Res string
 	A	template.HTML
 }
-
-
-
-func createFile(filename string) error {
-    // Create a new file with read and write permissions for the owner
-    file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0600) // Owner can read/write
-    if err != nil {
-		fmt.Println(err)
-		return err
-	}
-    defer file.Close()
-
-    // Write some data to the file
-    // _, err = file.WriteString("This is a sample text.")
-    return err
-}
-
+var  data Data
 func processHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w,  "Only POST requests are allowed", http.StatusMethodNotAllowed)
+	t, err := template.ParseFiles("home.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var data Data
-	data.Str = r.FormValue("data")
-	if len(data.Str) > 200 {
-		http.Error(w, "Input data exceeds 200 characters limit.", http.StatusBadRequest)
+	if  r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	data.Banner = r.FormValue("banner")
-	if !function.BannerExists(data.Banner) {
-		http.Error(w, "Banner not found", http.StatusNotFound)
-		return
-	}
-
-	data.Str = strings.ReplaceAll(data.Str, "\r\n", "\n")
 	
+	data.Str = r.FormValue("data")
+	data.Banner = r.FormValue("banner")
+	if !function.CheckBanner(data.Banner) {
+		http.Error(w, "Invalid banner", http.StatusBadRequest)
+		return
+	}
+
+	data.Str = strings.ReplaceAll(data.Str, "\r\n", "\\n")
+	data.Str = strings.ReplaceAll(data.Str, "\n", "\\n")
 	data.Res = function.TraitmentData(data.Banner, data.Str)
-	if data.Res == "" { 
-		http.Error(w, "Internal Server Error: Failed to process data.", http.StatusInternalServerError)
-		return
-	}
-	if err := createFile("ascii-art.txt"); err != nil {
-		http.Error(w,  "Failed to create file.", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Disposition", "attachment; filename=ascii-art.txt")
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Content-Length",  fmt.Sprintf("%d", len(data.Res)))
-	if _, err := w.Write([]byte(data.Res)); err != nil {
+	data.A = template.HTML(strings.ReplaceAll(data.Res, "\n", "<br>"))
+	if err := t.Execute(w, data); err != nil {
 		http.Error(w,  err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-func pageHandler(w http.ResponseWriter, r *http.Request) {
+
+
+func homePage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.Error(w, "Error 404 : Not Found", http.StatusNotFound)
+		http.Error(w, "Not found", http.StatusInternalServerError)
 		return
 	}
 	t, err := template.ParseFiles("home.html")
 	if err != nil {
-		http.Error(w, "Template not found", http.StatusNotFound)
+		fmt.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	if err := t.Execute(w, nil); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, err.Error(),  http.StatusInternalServerError)
 		return
 	}
 }
-func main() {
 
-	http.HandleFunc("/", pageHandler)
-	http.HandleFunc("/ascii-art", processHandler)
-	fmt.Println("Server is running at http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
+func exportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if data.Res != "" {
+		// fmt.Println(data.Res)
+		w.Header().Set("Content-Disposition", "attachment; filename=ascii-art.txt")
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Length",  fmt.Sprintf("%d", len(data.Res)))
+		if _, err := w.Write([]byte(data.Res)); err != nil {
+			http.Error(w,  err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Error(w, "No data to export", http.StatusNotFound)
+		return
+	}
+}
+
+
+func main() {
+	fs := http.FileServer(http.Dir("css"))
+	http.Handle("/css/", http.StripPrefix("/css", fs))
+	http.HandleFunc("/", homePage)
+	http.HandleFunc("/process", processHandler)
+	http.HandleFunc("/export", exportHandler)
+	fmt.Println("Server is running at http://localhost:8082")
+	if err := http.ListenAndServe(":8082", nil); err != nil {
 		fmt.Println("Error starting server:", err)
 	}
 }
